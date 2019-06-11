@@ -20,7 +20,7 @@
 # 2 bytes                  - Sprites count
 # 2 bytes                  - Sounds count
 # 2 bytes                  - Fonts count
-# 4 bytes                  - Position of mapping data (random) in the file
+# 4 bytes                  - Position of meta data
 # 4 bytes*num of sprites   - Position of sprites in file
 # 4 bytes*num of sounds    - Position of sounds in file
 # 4 bytes*num of sounds    - Position of fonts in file
@@ -33,9 +33,11 @@
 # ==============================================================
 # 1 byte                   - Length of the name
 # 1-255 bytes              - Name
-# 2 bytes                  - Features (1 last bit for sound)
+# 2 bytes                  - Feature flags: 0x1 for alpha 0x3 for sound
 # 2 bytes                  - Width
 # 2 bytes                  - Heihgt
+# 2 bytes                  - Origin X
+# 2 bytes                  - Origin Y
 # 2 bytes                  - Number of frames
 # 1 byte                   - Frames per second
 # 4 bytes * width * length * num of frames
@@ -111,7 +113,7 @@ def write_header(df, nsprites, nsounds, nfonts):
     return indexes, header_size
 
 
-def write_offsets(df, header_size, indexes_position, sprite_indexes):
+def write_indexes(df, header_size, indexes_position, sprite_indexes):
     df.seek(indexes_position)
     for index in sprite_indexes:
         index_with_offset = header_size + index
@@ -124,10 +126,14 @@ def compress_into(df, header_size, df_temp):
     df.write(zlib.compress(buf,9))
 
 
-def write_sprite_header(df_temp, name, imgfiles, img):
+def write_sprite_header(df_temp, name, imgfiles, img, alpha = True, sound = False):
     global sprite_offsets
     width, height = img.size
+    ox = int(width/2)
+    oy = height
     features = 0
+    if (alpha): features = features | 0x1
+    if (sound): features = features | 0x3
     frames = len(imgfiles)
     fps = 0
 
@@ -136,6 +142,8 @@ def write_sprite_header(df_temp, name, imgfiles, img):
     df_temp.write(features.to_bytes(2, byteorder='big'))
     df_temp.write(width.to_bytes(2, byteorder='big'))
     df_temp.write(height.to_bytes(2, byteorder='big'))
+    df_temp.write(ox.to_bytes(2, byteorder='big'))
+    df_temp.write(oy.to_bytes(2, byteorder='big'))
     df_temp.write(frames.to_bytes(2, byteorder='big'))
     df_temp.write(fps.to_bytes(1, byteorder='big'))
 
@@ -196,7 +204,7 @@ df_temp = open('data.tmp', 'wb')
 indexes_position, header_size = write_header(df, len(sprites), 0, 0)
 sprite_indexes = write_sprites(df_temp, sprites)
 assert len(sprites) == len(sprite_indexes)
-write_offsets(df, header_size, indexes_position, sprite_indexes)
+write_indexes(df, header_size, indexes_position, sprite_indexes)
 
 print('\ncompressing...')
 df_temp.close()
