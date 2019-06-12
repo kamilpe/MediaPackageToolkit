@@ -15,8 +15,9 @@ def read_bytes_str(fd, size):
 
 def decode_features(fbits):
     features = []
-    if (fbits & 0b01): features.append('alpha')
-    if (fbits & 0b10): features.append('sound')
+    if (fbits & 0b001): features.append('alpha')
+    if (fbits & 0b010): features.append('sound')
+    if (fbits & 0b100): features.append('loop')
     return features
 
 class sprite:
@@ -81,8 +82,7 @@ class mpk:
         return indexes
 
     def unpack(self):
-        #self.datafd = tempfile.TemporaryFile()
-        self.datafd = open('temp.tmp','w+b')
+        self.datafd = tempfile.TemporaryFile()
         if (self.is_compressed):
             print('decompressing...')
             self.datafd.write(zlib.decompress(self.fd.read()))
@@ -131,13 +131,16 @@ class mpk:
         print ('')
         print ('Sprites:')
         print ('------------------------------------------------------------------')
-        i = 0
-        for s in self.sprites:
-            i+=1
-            print(i, ': "'+s.name+'" -- width:', s.width, 'height:', s.height,
-                  'origin x:', s.origin_x, 'origin_y:',s.origin_y,
-                  'frames:', s.frames_count, 'fps:', s.fps,
-                  'features:', s.features)
+        for i in range(0,len(self.sprites)):
+            self.print_sprite(i)
+
+
+    def print_sprite(self, i):
+        s = self.sprites[i]
+        print(i, ': "'+s.name+'" -- width:', s.width, 'height:', s.height,
+              'origin x:', s.origin_x, 'origin_y:',s.origin_y,
+            'frames:', s.frames_count, 'fps:', s.fps,
+              'features:', s.features)
 
     def print_indexes(self, name, indexes, count):
         print (name+':', count)

@@ -37,13 +37,13 @@
 # ==============================================================
 # 1 byte                   - Length of the name
 # 1-255 bytes              - Name
-# 2 bytes                  - Feature flags: 0x1 for alpha 0x2 for sound
+# 2 bytes                  - 0b001 - alpha, 0b010 - sound, 0b100 - loop
 # 2 bytes                  - Width
 # 2 bytes                  - Heihgt
 # 2 bytes                  - Origin X
 # 2 bytes                  - Origin Y
 # 2 bytes                  - Number of frames
-3# 1 byte                   - Frames per second
+# 1 byte                   - Frames per second
 # 4 bytes * width * length * num of frames
 #                          - RGBA of sprites
 # extra bytes              - Only if has sound. Sound format after name section
@@ -72,14 +72,16 @@ from PIL import Image
 
 if (len(sys.argv) < 2):
     print("mpack.py filename [ds]")
-    print("d - for uncompressed")
-    print("s - for no progress")
+    print("d - uncompressed")
+    print("s - no progress")
+    print("v - detailed information")
     quit()
 
 out_name = sys.argv[1]
 params = '' if len(sys.argv) < 3 else sys.argv[2]
 is_compression = (params.find('d') == -1)
 is_silent = (params.find('s') != -1)
+is_verbose = (params.find('v') != -1)
 df = open(out_name, "wb")
 df_temp = tempfile.TemporaryFile()
 
@@ -111,11 +113,14 @@ def read_sprites(source):
             name = splited[0]
             ext = splited[1].lower()
             if ext in exts:
-                name = path.replace('./','') + "/" + re.sub(r'\d*', '', name)
+                index = re.sub(r'\D','',name)
+                name = path.replace('./','') + "/" + re.sub(r'\d', '', name)
                 fullFilePath = path + "/" + filename
                 if (name not in sprites):
-                    sprites[name] = []
-                sprites[name].append(fullFilePath)
+                    sprites[name] = {}
+                sprites[name][index] = fullFilePath
+            #sort(sprites[name])
+
     return sprites
 
 
@@ -167,18 +172,19 @@ def write_meta(df_temp):
     df_temp.write(bytes([0x00,0x00,0x00,0x00]))
 
 
-def write_sprite_header(df_temp, name, imgfiles, img, alpha = True, sound = False):
+def write_sprite_header(df_temp, name, imgfiles, img, alpha, sound):
     global sprite_offsets
     width, height = img.size
     frames = len(imgfiles)
 
     features = 0
-    if (alpha): features = features | 0b01
-    if (sound): features = features | 0b10
+    if (alpha): features = features | 0b001
+    if (sound): features = features | 0b010
+    if (check_param(name,'loop',True)): features = features | 0b100
 
     ox = check_param(name, 'origin_x', int(width/2))
     oy = check_param(name, 'origin_y', height)
-    fps = check_param(name, 'fps', 0)
+    fps = check_param(name, 'fps', 8)
 
     df_temp.write(len(name).to_bytes(1, 'big', signed=False))
     df_temp.write(name[:255].encode())
@@ -195,8 +201,11 @@ def write_sprite_data_raw(df_temp, img):
     df_temp.write(img.tobytes())
 
 
-def write_sprite_data_rgb_generated_a(df_temp, img):
+def write_sprite_data_rgb_generated_a(df_temp, name, img):
     ra,ga,ba = img.getpixel((0,0))
+    ra = check_param(name, 'alpha_r', ra)
+    ga = check_param(name, 'alpha_g', ga)
+    ba = check_param(name, 'alpha_b', ba)
     imgbytes = bytearray(img.convert('RGBA').tobytes())
     for i in range(0,len(imgbytes),4):
         r = imgbytes[i]
@@ -216,30 +225,34 @@ def write_sprites(df_temp, sprites):
     t = 0
     for name,imgfiles in sprites.items():
         global is_silent
-        if (not is_silent):
+        if (is_verbose):
+            print(name)
+        elif (not is_silent):
             t+=1
             percents = round(100.0 * t / float(len(sprites.items())), 1)
             sys.stdout.write('\rsprites conversion: %s%s' % (percents, '%'))
             sys.stdout.flush()
 
-        img = Image.open(imgfiles[0])
-        alpha = check_param(name, 'alpha', True if img.mode == 'RGBA' else False)
-
         sprite_indexes.append(df_temp.tell())
-        write_sprite_header(df_temp, name, imgfiles, img, alpha = alpha)
+        img = Image.open(next(iter(imgfiles.values())))
+        alpha = check_param(name, 'alpha', True if img.mode == 'RGBA' else False)
+        write_sprite_header(df_temp, name, imgfiles, img, alpha = alpha, sound = False)
 
-        for imgfile in imgfiles:
+        for key in sorted(imgfiles.keys()):
+            imgfile = imgfiles[key]
+            if (is_verbose):
+                print('  ', imgfile)
             img = Image.open(imgfile)
             if (alpha):
                 if (img.mode == 'RGBA'):
                     write_sprite_data_rgba_raw(df_temp, img)
                 elif (img.mode == 'RGB'):
-                    write_sprite_data_rgb_generated_a(df_temp, img)
+                    write_sprite_data_rgb_generated_a(df_temp, name, img)
                 else:
-                    write_sprite_data_rgb_generated_a(df_temp, img.convert('RGB'))
+                    write_sprite_data_rgb_generated_a(df_temp, name, img.convert('RGB'))
             else:
                 write_sprite_data_raw(df_temp, img.convert('RGB'))
-    if (not is_silent): print('')
+    if (not is_verbose and not is_silent): print('')
     return sprite_indexes
 
 
