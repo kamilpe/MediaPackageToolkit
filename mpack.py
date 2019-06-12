@@ -9,7 +9,8 @@
 # Example of usage:
 # ./mpack.py myfile.json
 #
-# JSON file is used to provide meta data, like coordinates of origin, or sound file.
+# JSON file is used to provide meta data, like coordinates of origin,
+# or sound file.
 # You can also override the names without changing physical names
 #
 # MPK file format:
@@ -27,19 +28,22 @@
 #
 # --- gzip compression for the rest of the file ---
 #
-# X bytes                  - Mapping data, application layer
+# Meta format:
+# ==============================================================
+# 4 bytes                  - Size of the meta
+# X bytes                  - Content
 #
 # Sprite format:
 # ==============================================================
 # 1 byte                   - Length of the name
 # 1-255 bytes              - Name
-# 2 bytes                  - Feature flags: 0x1 for alpha 0x3 for sound
+# 2 bytes                  - Feature flags: 0x1 for alpha 0x2 for sound
 # 2 bytes                  - Width
 # 2 bytes                  - Heihgt
 # 2 bytes                  - Origin X
 # 2 bytes                  - Origin Y
 # 2 bytes                  - Number of frames
-# 1 byte                   - Frames per second
+3# 1 byte                   - Frames per second
 # 4 bytes * width * length * num of frames
 #                          - RGBA of sprites
 # extra bytes              - Only if has sound. Sound format after name section
@@ -61,11 +65,9 @@
 import os
 import sys
 import re
-import io
 import zlib
 import tempfile
 import json
-import re
 from PIL import Image
 
 if (len(sys.argv) < 2):
@@ -82,31 +84,35 @@ df = open(out_name, "wb")
 df_temp = tempfile.TemporaryFile()
 
 pre, ext = os.path.splitext(out_name)
-with open( pre + ".json", 'r') as f:
-    config = json.load(f)
+json_file = pre + ".json"
+config = {}
+if (os.path.exists(json_file)):
+    with open(json_file, 'r') as f:
+        config = json.load(f)
 
-def check_param(iname, pname):
+
+def check_param(iname, pname, default):
     global config
-    for pattern,content in config.items():
+    for pattern, content in config.items():
         p = re.compile(pattern)
         if (p.match(iname)):
-            for p,value in content.items():
+            for p, value in content.items():
                 if (p == pname):
                     return value
-    return None
+    return default
 
 
 def read_sprites(source):
     sprites = {}
-    for path,d,f in os.walk(source):
+    for path, d, f in os.walk(source):
         exts = [".bmp", ".png", ".jpg"]
         for filename in f:
             splited = os.path.splitext(filename)
             name = splited[0]
             ext = splited[1].lower()
             if ext in exts:
-                name = re.sub(r'\d*', '', name)
-                fullFilePath = path + "/" + filename;
+                name = path.replace('./','') + "/" + re.sub(r'\d*', '', name)
+                fullFilePath = path + "/" + filename
                 if (name not in sprites):
                     sprites[name] = []
                 sprites[name].append(fullFilePath)
@@ -131,7 +137,7 @@ def write_header(df, nsprites, nsounds, nfonts, is_compression):
     # indexes
     indexes = df.tell()
     df.write(placeholder.to_bytes(4, 'big', signed=False))
-    for i in range(1, nsprites + nsounds + nfonts):
+    for i in range(0, nsprites + nsounds + nfonts):
         df.write(placeholder.to_bytes(4, 'big', signed=False))
 
     # write header size
@@ -145,6 +151,7 @@ def write_header(df, nsprites, nsounds, nfonts, is_compression):
 
 def write_indexes(df, header_size, indexes_position, sprite_indexes):
     df.seek(indexes_position)
+    df.write(header_size.to_bytes(4,'big',signed=False))  # meta index
     for index in sprite_indexes:
         index_with_offset = header_size + index
         df.write(index_with_offset.to_bytes(4, 'big', signed=False))
@@ -153,24 +160,25 @@ def write_indexes(df, header_size, indexes_position, sprite_indexes):
 def compress_into(df, header_size, df_temp):
     df.seek(header_size)
     df_temp.seek(0)
-    buf = df_temp.read();
-    df.write(zlib.compress(buf,9))
+    df.write(zlib.compress(df_temp.read(),9))
+
+
+def write_meta(df_temp):
+    df_temp.write(bytes([0x00,0x00,0x00,0x00]))
 
 
 def write_sprite_header(df_temp, name, imgfiles, img, alpha = True, sound = False):
     global sprite_offsets
     width, height = img.size
-
-    ox = check_param(name, 'origin_x')
-    if (ox is None): ox = int(width/2)
-    oy = check_param(name, 'origin_y')
-    if (oy is None): oy = height
+    frames = len(imgfiles)
 
     features = 0
-    if (alpha): features = features | 0x1
-    if (sound): features = features | 0x3
-    frames = len(imgfiles)
-    fps = 0
+    if (alpha): features = features | 0b01
+    if (sound): features = features | 0b10
+
+    ox = check_param(name, 'origin_x', int(width/2))
+    oy = check_param(name, 'origin_y', height)
+    fps = check_param(name, 'fps', 0)
 
     df_temp.write(len(name).to_bytes(1, 'big', signed=False))
     df_temp.write(name[:255].encode())
@@ -215,8 +223,7 @@ def write_sprites(df_temp, sprites):
             sys.stdout.flush()
 
         img = Image.open(imgfiles[0])
-        alpha = check_param(name, 'alpha')
-        if (alpha is None): alpha = True if img.mode == 'RGBA' else False
+        alpha = check_param(name, 'alpha', True if img.mode == 'RGBA' else False)
 
         sprite_indexes.append(df_temp.tell())
         write_sprite_header(df_temp, name, imgfiles, img, alpha = alpha)
@@ -238,6 +245,7 @@ def write_sprites(df_temp, sprites):
 
 sprites = read_sprites(".")
 indexes_position, header_size = write_header(df, len(sprites), 0, 0, is_compression)
+write_meta(df_temp)
 sprite_indexes = write_sprites(df_temp, sprites)
 assert len(sprites) == len(sprite_indexes)
 write_indexes(df, header_size, indexes_position, sprite_indexes)
