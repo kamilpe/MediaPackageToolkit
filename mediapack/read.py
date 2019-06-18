@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+#
+#               Multimedia Package System
+# Copyright (c) 2019 by Kamil Pawlowski <kamilpe@gmail.com>
 
 import zlib
 import tempfile
@@ -44,7 +47,7 @@ class sprite:
             data = datafd.read(self.width*self.height*pixel_size)
             self.frames.append(Image.frombytes(mode,(self.width,self.height),data))
 
-class mpk:
+class MpkReader:
     def __init__(self, filename):
         self.name = filename
         self.fd = open(filename, 'rb')

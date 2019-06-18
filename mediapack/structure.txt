@@ -1,0 +1,47 @@
+MPK header format:
+==============================================================
+ 3 bytes                  - MPK
+ 1 byte                   - 0x1 for compressed or 0x0 for uncompressed
+ 2 bytes                  - Header size
+ 2 bytes                  - Sprites count
+ 2 bytes                  - Sounds count
+ 2 bytes                  - Fonts count
+ 4 bytes                  - Position of meta data
+ 4 bytes*num of sprites   - Position of sprites in file
+ 4 bytes*num of sounds    - Position of sounds in file
+ 4 bytes*num of sounds    - Position of fonts in file
+
+ --- gzip compression for the rest of the file ---
+
+Meta format:
+==============================================================
+ 4 bytes                  - Size of the meta
+ X bytes                  - Content
+
+Sprite format:
+==============================================================
+ 1 byte                   - Length of the name
+ 1-255 bytes              - Name
+ 2 bytes                  - 0b001 - alpha, 0b010 - sound, 0b100 - loop
+ 2 bytes                  - Width
+ 2 bytes                  - Heihgt
+ 2 bytes                  - Origin X
+ 2 bytes                  - Origin Y
+ 2 bytes                  - Number of frames
+ 1 byte                   - Frames per second
+ 4 bytes * width * length * num of frames
+                          - RGBA of sprites
+
+Sound format:
+==============================================================
+ 1 byte                   - Length of the name
+ 1-255 bytes              - Name
+ 1 byte                   - Channels
+ 2 bytes                  -
+ 2 bytes                  - Length in miliseconds
+ length*frequency*resolution
+                          - Samples
+
+Font format:
+==============================================================
+ todo

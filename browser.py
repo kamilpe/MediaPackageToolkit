@@ -1,9 +1,12 @@
 #!/usr/bin/python3
+#
+#               Multimedia Package System
+# Copyright (c) 2019 by Kamil Pawlowski <kamilpe@gmail.com>
 
-import reader
 import sys
 import tkinter
 import time
+from mediapack.read import MpkReader
 from PIL import ImageTk
 
 if (len(sys.argv) < 2):
@@ -70,12 +73,12 @@ class Animation:
         self.root.geometry("+{}+{}".format(positionRight, positionDown))
 
 
-pack = reader.mpk(sys.argv[1])
+
+pack = MpkReader(sys.argv[1])
 if (len(sys.argv) > 2):
     if (len(sys.argv) > 3 and sys.argv[2] == 'sprite'):
         Animation(pack, int(sys.argv[3]))
     elif (len(pack.sprites) > 0):
         Animation(pack, 0)
-
 else:
     pack.printout()
