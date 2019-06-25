@@ -25,6 +25,9 @@ class MpkWriter:
     def __init__(self, compression=True, progressbar=True):
         self.compression = compression
         self.progressbar = progressbar
+        self.sprite_indexes = []
+        self.sound_indexes = []
+        self.font_indexes = []
 
     def pack(self, src_path, dst_filepath):
         # prepare
@@ -37,7 +40,10 @@ class MpkWriter:
         self.prepare_config()
         self.list_files()
         self.write_header()
+        self.write_meta()
         self.write_sprites()
+        self.write_sounds()
+        self.write_indexes()
         self.compress_or_copy_data_file()
 
     def prepare_config(self):
@@ -45,6 +51,7 @@ class MpkWriter:
         json_file = pre + ".json"
         self.config = {}
         if (os.path.exists(json_file)):
+            if (self.progressbar): print("found config:",json_file)
             with open(json_file, 'r') as f:
                 self.config = json.load(f)
 
@@ -69,15 +76,14 @@ class MpkWriter:
                 splited = os.path.splitext(filename)
                 name = splited[0]
                 ext = splited[1].lower()
-                index = re.sub(r'\D','',name)
-                name = path.replace('./','') + "/" + re.sub(r'\d', '', name)
                 fullFilePath = path + "/" + filename
                 if ext in sprite_exts:
-                    if (name not in self.sprites):
-                        self.sprites[name] = {}
-                        self.sprites[name][index] = fullFilePath
-                    elif ext in wave_exts:
-                        self.sounds[name] = fullFilePath
+                    index = re.sub(r'\D','',name)
+                    name = path.replace('./','') + "/" + re.sub(r'\d', '', name)
+                    if (name not in self.sprites): self.sprites[name] = {}
+                    self.sprites[name][index] = fullFilePath
+                elif ext in wave_exts:
+                    self.sounds[name] = fullFilePath
 
     def write_header(self):
         # signature
@@ -106,21 +112,33 @@ class MpkWriter:
         write_bytes(self.dst_file, self.header_size, 2)
         self.dst_file.seek(self.header_size)
 
-    def write_sprites(self):
-        self.sprite_indexes = []
+    def write_indexes(self):
+        self.dst_file.seek(self.indexes_position)
+        write_bytes(self.dst_file, self.header_size, 4) # meta index
+        for index in self.sprite_indexes:
+            write_bytes(self.dst_file, self.header_size + index, 4)
+        for index in self.sound_indexes:
+            write_bytes(self.dst_file, self.header_size + index, 4)
 
+    def write_meta(self):
+        write_bytes(self.data_file, 0, 4) # meta size
+
+    def show_progress(self, title, index, count):
+        percents = round(100.0 * index / float(count), 1)
+        sys.stdout.write('\r%s %s%s' % (title, percents, '%'))
+        sys.stdout.flush()
+
+    def write_sprites(self):
         index = 0
         for name,imgfiles in self.sprites.items():
             if (self.progressbar):
                 index+=1
-                percents = round(100.0 * index / float(len(self.sprites.items())), 1)
-                sys.stdout.write('\rsprites conversion: %s%s' % (percents, '%'))
-                sys.stdout.flush()
+                self.show_progress("sprites conversion:", index, len(self.sprites.items()))
 
-            self.sprite_indexes.append(self.data_file.tell())
             img = Image.open(next(iter(imgfiles.values())))
+
             alpha = self.check_param(name, 'alpha', True if img.mode == 'RGBA' else False)
-            self.write_sprite_header(name, imgfiles, img, alpha = alpha, sound = False)
+            self.write_sprite_header(name, imgfiles, img, alpha = alpha)
 
             for key in sorted(imgfiles.keys()):
                 imgfile = imgfiles[key]
@@ -134,19 +152,19 @@ class MpkWriter:
                         self.write_sprite_data_rgb_generated_a(name, img.convert('RGB'))
                 else:
                     self.write_sprite_data_raw(img.convert('RGB'))
-        print('')
+        if (self.progressbar and len(self.sprites)>0): print('')
 
-    def write_sprite_header(self, name, imgfiles, img, alpha, sound):
+    def write_sprite_header(self, name, imgfiles, img, alpha):
+        self.sprite_indexes.append(self.data_file.tell())
+
         width, height = img.size
         frames = len(imgfiles)
-
         features = 0
         if (alpha): features = features | 0b001
-        if (sound): features = features | 0b010
-        if (self.check_param(name,'loop',True)): features = features | 0b100
+        if (self.check_param(name,'loop',True)): features = features | 0b010
         ox = self.check_param(name, 'origin_x', int(width/2))
         oy = self.check_param(name, 'origin_y', height)
-        fps = self.check_param(name, 'fps', 5 if len(imgfiles)>0 else 0)
+        fps = self.check_param(name, 'fps', 5 if len(imgfiles)>1 else 0)
 
         write_str(self.data_file, name)
         write_bytes(self.data_file, features, 2)
@@ -157,15 +175,11 @@ class MpkWriter:
         write_bytes(self.data_file, frames, 2)
         write_bytes(self.data_file, fps, 1)
 
-    def write_sprite_data_raw(self, img):
-        self.data_file.write(img.tobytes())
-
-
     def write_sprite_data_rgb_generated_a(self, name, img):
         ra,ga,ba = img.getpixel((0,0))
-        ra = check_param(name, 'alpha_r', ra)
-        ga = check_param(name, 'alpha_g', ga)
-        ba = check_param(name, 'alpha_b', ba)
+        ra = self.check_param(name, 'alpha_r', ra)
+        ga = self.check_param(name, 'alpha_g', ga)
+        ba = self.check_param(name, 'alpha_b', ba)
 
         imgbytes = bytearray(img.convert('RGBA').tobytes())
 
@@ -181,11 +195,32 @@ class MpkWriter:
 
         self.data_file.write(imgbytes)
 
+    def write_sprite_data_raw(self, img):
+        self.data_file.write(img.tobytes())
+
+    def write_sounds(self):
+        index = 0
+        for name,wave_file in self.sounds.items():
+            if (self.progressbar):
+                index+=1
+                self.show_progress("wave conversion:", index, len(self.sounds.items()))
+
+            wave_data = wave.open(wave_file, 'rb')
+            self.sound_indexes.append(self.data_file.tell())
+            write_str(self.data_file, name)
+            write_bytes(self.data_file, wave_data.getnchannels(), 1)
+            write_bytes(self.data_file, wave_data.getsampwidth(), 1)
+            write_bytes(self.data_file, wave_data.getframerate(), 2)
+            write_bytes(self.data_file, wave_data.getnframes(), 4)
+            self.data_file.write(wave_data.readframes(wave_data.getnframes()))
+
+        if (self.progressbar and len(self.sounds)>0): print('')
+
     def compress_or_copy_data_file(self):
         self.data_file.seek(0)
         self.dst_file.seek(self.header_size)
         if (self.compression):
-            print('compressing the', self.dst_filepath)
+            if (self.progressbar): print('compressing the', self.dst_filepath)
             self.dst_file.write(zlib.compress(self.data_file.read(),9))
         else:
             self.dst_file.write(self.data_file.read())

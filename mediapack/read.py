@@ -19,8 +19,7 @@ def read_bytes_str(fd, size):
 def decode_features(fbits):
     features = []
     if (fbits & 0b001): features.append('alpha')
-    if (fbits & 0b010): features.append('sound')
-    if (fbits & 0b100): features.append('loop')
+    if (fbits & 0b010): features.append('loop')
     return features
 
 class sprite:
@@ -47,6 +46,18 @@ class sprite:
             data = datafd.read(self.width*self.height*pixel_size)
             self.frames.append(Image.frombytes(mode,(self.width,self.height),data))
 
+
+class sound:
+    def __init__(self, datafd):
+        name_len = read_bytes_int(datafd, 1)
+        self.name = read_bytes_str(datafd, name_len)
+        self.channels = read_bytes_int(datafd,1)
+        self.sample = read_bytes_int(datafd,1)
+        self.framerate = read_bytes_int(datafd, 2)
+        self.frame_count = read_bytes_int(datafd, 4)
+        self.data = datafd.read(self.frame_count*self.channels*self.sample)
+
+
 class MpkReader:
     def __init__(self, filename):
         self.name = filename
@@ -56,6 +67,7 @@ class MpkReader:
         self.unpack()
 
         self.sprites = []
+        self.sounds = []
         while (True):
             if not self.read_next_data():
                 break;
@@ -99,7 +111,7 @@ class MpkReader:
             self.sprites.append(sprite(self.datafd))
             return True
         elif position in self.sound_indexes:
-            self.read_sound()
+            self.sounds.append(sound(self.datafd))
             return True
         elif position in self.font_indexes:
             self.read_font()
@@ -108,10 +120,6 @@ class MpkReader:
             self.read_meta()
             return True
         return False
-
-
-    def read_sound(self):
-        print('found sound')
 
     def read_font(self):
         print('found font')
@@ -136,14 +144,24 @@ class MpkReader:
         print ('------------------------------------------------------------------')
         for i in range(0,len(self.sprites)):
             self.print_sprite(i)
+        print('')
+        print ('Sounds:')
+        print ('------------------------------------------------------------------')
+        for i in range(0,len(self.sounds)):
+            self.print_sound(i)
 
 
     def print_sprite(self, i):
         s = self.sprites[i]
         print(i, ': "'+s.name+'" -- width:', s.width, 'height:', s.height,
               'origin x:', s.origin_x, 'origin_y:',s.origin_y,
-            'frames:', s.frames_count, 'fps:', s.fps,
+              'frames:', s.frames_count, 'fps:', s.fps,
               'features:', s.features)
+
+    def print_sound(self, i):
+        s = self.sounds[i]
+        print(i, ': "'+s.name+'" -- channels:',s.channels,'framerate:',s.framerate,
+              'sample:',s.sample*8,'length:', int(s.frame_count / float(s.framerate)),'sec')
 
     def print_indexes(self, name, indexes, count):
         print (name+':', count)

@@ -4,14 +4,35 @@
 # Copyright (c) 2019 by Kamil Pawlowski <kamilpe@gmail.com>
 
 import sys
-import tkinter
 import time
+import argparse
+import pyaudio
+import tkinter
 from mediapack.read import MpkReader
 from PIL import ImageTk
 
-if (len(sys.argv) < 2):
-    print("Provide a file")
-    exit()
+parser = argparse.ArgumentParser(description='Multimedia Package system')
+parser.add_argument('filename')
+parser.add_argument("--sprite", help="show sprite form the index", type=int)
+parser.add_argument("--sound", help="play sound from the index", type=int)
+args = parser.parse_args()
+
+class Sound:
+    def __init__(self,pack,index):
+        self.pack = pack
+        self.sound = self.pack.sounds[index]
+        self.pack.print_sound(index)
+        p = pyaudio.PyAudio
+        stream = p.open(p, format=p.get_format_from_width(p, width = self.sound.sample),
+                        channels=self.sound.channels,
+                        rate=self.sound.channels,
+                        output=True,
+                        output_device_index=1)
+
+        for i in range(0,self.sound.frame_count):
+            start = i * self.sound.channels * self.sound.sample
+            stop = start + self.sound_channel * self.sound_sample
+            stream.write(self.sound.data[start:stop])
 
 class Animation:
     def __init__(self,pack,index):
@@ -26,7 +47,6 @@ class Animation:
         self.panel = tkinter.Label(self.tk_frame, image = self.frames[0])
         self.panel.pack(side='bottom',fill='both',expand='yes')
         self.tk_frame.focus_set()
-        self.direction = 1
         self.change_image()
         self.center()
         self.root.mainloop()
@@ -73,12 +93,10 @@ class Animation:
         self.root.geometry("+{}+{}".format(positionRight, positionDown))
 
 
-
-pack = MpkReader(sys.argv[1])
-if (len(sys.argv) > 2):
-    if (len(sys.argv) > 3 and sys.argv[2] == 'sprite'):
-        Animation(pack, int(sys.argv[3]))
-    elif (len(pack.sprites) > 0):
-        Animation(pack, 0)
+pack = MpkReader(args.filename)
+if (args.sprite is not None):
+    Animation(pack, args.sprite)
+elif (args.sound is not None):
+    Sound(pack, args.sound)
 else:
     pack.printout()

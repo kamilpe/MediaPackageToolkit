@@ -1,0 +1,6 @@
+#!/bin/sh
+
+PYTHON=python3.7
+
+${PYTHON} `dirname "$0"`/browse.py "$@"
+

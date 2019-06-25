@@ -22,7 +22,7 @@ Sprite format:
 ==============================================================
  1 byte                   - Length of the name
  1-255 bytes              - Name
- 2 bytes                  - 0b001 - alpha, 0b010 - sound, 0b100 - loop
+ 2 bytes                  - 0b001 - alpha, 0b010 - loop
  2 bytes                  - Width
  2 bytes                  - Heihgt
  2 bytes                  - Origin X
@@ -37,9 +37,10 @@ Sound format:
  1 byte                   - Length of the name
  1-255 bytes              - Name
  1 byte                   - Channels
- 2 bytes                  -
- 2 bytes                  - Length in miliseconds
- length*frequency*resolution
+ 1 bytes                  - Sample width
+ 2 bytes                  - Frame rate
+ 2 bytes                  - Frame count
+ Sample width * Channels * Frame Count
                           - Samples
 
 Font format:
