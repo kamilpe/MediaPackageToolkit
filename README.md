@@ -1,4 +1,4 @@
-               Multimedia Package System
+               Multimedia Package Toolkit
 Copyright (c) 2019 by Kamil Pawlowski <kamilpe@gmail.com>
 
 Tool for creating integrated package files with multimedia data.

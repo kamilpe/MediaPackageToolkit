@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-#               Multimedia Package System
+#               Multimedia Package Toolkit
 # Copyright (c) 2019 by Kamil Pawlowski <kamilpe@gmail.com>
 
 import zlib
